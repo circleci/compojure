@@ -38,7 +38,7 @@
                   (assoc :params {:y "bar"}))]
       ((GET "/:x" [x :as r]
             (is (= x "foo"))
-            (is (= (dissoc r :params :route-params :compojure/route)
+            (is (= (dissoc r :params :route-params :compojure/route :compojure/full-route)
                    (dissoc req :params)))
             nil)
        req)))
@@ -212,7 +212,7 @@
     (let [handler        (GET "/ip/:ip" [ip] ip)
           cxt-handler    (context "/ip/:ip" [ip] (GET "/" [] ip))
           in-cxt-handler (context "/ip" [] (GET "/:ip" [ip] ip))
-          request        (mock/request :get "/ip/0%3A0%3A0%3A0%3A0%3A0%3A0%3A1%250") ]
+          request        (mock/request :get "/ip/0%3A0%3A0%3A0%3A0%3A0%3A0%3A1%250")]
       (is (= (-> request handler :body)        "0:0:0:0:0:0:0:1%0"))
       (is (= (-> request cxt-handler :body)    "0:0:0:0:0:0:0:1%0"))
       (is (= (-> request in-cxt-handler :body) "0:0:0:0:0:0:0:1%0"))))
@@ -221,7 +221,7 @@
     (let [handler        (GET "/emote/:emote" [emote] emote)
           cxt-handler    (context "/emote/:emote" [emote] (GET "/" [] emote))
           in-cxt-handler (context "/emote" [] (GET "/:emote" [emote] emote))
-          request        (mock/request :get "/emote/%5C%3F%2F") ]
+          request        (mock/request :get "/emote/%5C%3F%2F")]
       (is (= (-> request handler :body)        "\\?/"))
       (is (= (-> request cxt-handler :body)    "\\?/"))
       (is (= (-> request in-cxt-handler :body) "\\?/"))))
@@ -323,7 +323,29 @@
         request (route (mock/request :post "/foo/1" {}))]
     (testing "ANY request has matched route information"
       (is (= (request :compojure/route)
-             [:any "/foo/:id"])))))
+             [:any "/foo/:id"]))
+      (is (= (request :compojure/full-route)
+             "/foo/:id"))))
+
+  (let [route (context "/foo/:foo-id" [_] (GET "/bar/:bar-id" req req))
+        request (route (mock/request :get "/foo/1/bar/2"))]
+    (testing "request has matched route information with path prefix"
+      (is (= (request :compojure/route)
+             [:get "/bar/:bar-id"]))
+      (is (= (request :compojure/context)
+             "/foo/:foo-id"))
+      (is (= (request :compojure/full-route)
+             "/foo/:foo-id/bar/:bar-id"))))
+
+  (let [route (context "/foo/:foo-id" [_]
+                (context "/bar/:bar-id" [_]
+                  (GET "/baz/:baz-id" req req)))
+        request (route (mock/request :get "/foo/1/bar/2/baz/3"))]
+    (testing "request has matched route information with multiple path prefix"
+      (is (= (request :compojure/context)
+             "/foo/:foo-id/bar/:bar-id"))
+      (is (= (request :compojure/full-route)
+             "/foo/:foo-id/bar/:bar-id/baz/:baz-id")))))
 
 (deftest route-async-test
   (testing "single route"
