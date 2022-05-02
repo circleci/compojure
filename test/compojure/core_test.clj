@@ -332,7 +332,7 @@
     (testing "request has matched route information with path prefix"
       (is (= (request :compojure/route)
              [:get "/bar/:bar-id"]))
-      (is (= (request :compojure/context)
+      (is (= (request :compojure/context-path)
              "/foo/:foo-id"))
       (is (= (request :compojure/full-route)
              "/foo/:foo-id/bar/:bar-id"))))
@@ -342,7 +342,7 @@
                   (GET "/baz/:baz-id" req req)))
         request (route (mock/request :get "/foo/1/bar/2/baz/3"))]
     (testing "request has matched route information with multiple path prefix"
-      (is (= (request :compojure/context)
+      (is (= (request :compojure/context-path)
              "/foo/:foo-id/bar/:bar-id"))
       (is (= (request :compojure/full-route)
              "/foo/:foo-id/bar/:bar-id/baz/:baz-id")))))

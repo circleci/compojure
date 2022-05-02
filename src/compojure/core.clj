@@ -134,12 +134,12 @@
 (defn- wrap-route-info [handler route-info]
   (fn
     ([request]
-     (let [full-route (str (:compojure/context request) (second route-info))]
+     (let [full-route (str (:compojure/context-path request) (second route-info))]
        (handler (assoc request
                        :compojure/route route-info
                        :compojure/full-route full-route))))
     ([request respond raise]
-     (let [full-route (str (:compojure/context request) (second route-info))]
+     (let [full-route (str (:compojure/context-path request) (second route-info))]
        (handler (assoc request
                        :compojure/route route-info
                        :compojure/full-route full-route)
@@ -259,47 +259,34 @@
 (defn- remove-suffix [path suffix]
   (subs path 0 (- (count path) (count suffix))))
 
-(defn- context-request [request route]
+(defn- context-request [request route context-path]
   (if-let [params (clout/route-matches route request)]
     (let [uri     (:uri request)
-          path    (:path-info request uri)
-          context (or (:context request) "")
           subpath (:__path-info params)
-          params  (dissoc params :__path-info)
-          context-route (:context-route (meta route))]
+          params  (dissoc params :__path-info)]
       (-> request
           (assoc-route-params (decode-route-params params))
           (assoc :path-info (if (= subpath "") "/" subpath)
                  :context   (remove-suffix uri subpath))
-          (update :compojure/context (fn [ctx] (str ctx context-route)))))))
+          (update :compojure/context-path (fn [ctx] (str ctx context-path)))))))
 
 (defn- context-route [route]
   (let [re-context {:__path-info #"|/.*"}]
     (cond
       (string? route)
-      (with-meta (clout/route-compile (str route ":__path-info") re-context)
-        {:context-route route})
+      (clout/route-compile (str route ":__path-info") re-context)
       (and (vector? route) (literal? route))
-      (with-meta (clout/route-compile
-                   (str (first route) ":__path-info")
-                   (merge (apply hash-map (rest route)) re-context))
-        {:context-route (first route)})
+      (clout/route-compile
+       (str (first route) ":__path-info")
+       (merge (apply hash-map (rest route)) re-context))
       (vector? route)
-      `(let [route# ~(first route)]
-         (with-meta
-           (clout/route-compile
-             (str route# ":__path-info")
-             ~(merge (apply hash-map (rest route)) re-context))
-           {:context-route route#}))
+      `(clout/route-compile
+        (str ~(first route) ":__path-info")
+        ~(merge (apply hash-map (rest route)) re-context))
       :else
-      `(let [route# ~route]
-         (with-meta
-           (clout/route-compile (str route# ":__path-info") ~re-context)
-           (if (string? route#)
-             {:context-route route#}
-             {}))))))
+      `(clout/route-compile (str ~route ":__path-info") ~re-context))))
 
-(defn ^:no-doc make-context [route make-handler]
+(defn ^:no-doc make-context [route path make-handler]
   (letfn [(handler
             ([request]
              (when-let [context-handler (make-handler request)]
@@ -312,10 +299,10 @@
       handler
       (fn
         ([request]
-         (if-let [request (context-request request route)]
+         (if-let [request (context-request request route path)]
            (handler request)))
         ([request respond raise]
-         (if-let [request (context-request request route)]
+         (if-let [request (context-request request route path)]
            (handler request respond raise)
            (respond nil)))))))
 
@@ -331,6 +318,7 @@
   [path args & routes]
   `(make-context
     ~(context-route path)
+    ~path
     (fn [request#]
       (let-request [~args request#]
         (routes ~@routes)))))
